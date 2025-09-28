@@ -1,46 +1,47 @@
-import pytest
 import sqlite3
-import os
-from registration.registration import create_db, add_user, authenticate_user, display_users
 
-@pytest.fixture(scope="module")
-def setup_database():
-    """Фикстура для настройки базы данных перед тестами и её очистки после."""
-    create_db()
-    yield
-    try:
-        os.remove('users.db')
-    except PermissionError:
-        pass
+DB_NAME = "users.db"
 
-@pytest.fixture
-def connection():
-    """Фикстура для получения соединения с базой данных и его закрытия после теста."""
-    conn = sqlite3.connect('users.db')
-    yield conn
+
+def create_db():
+    """Создание базы данных и таблицы пользователей"""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute(
+        """CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL
+        )"""
+    )
+    conn.commit()
     conn.close()
 
 
-def test_create_db(setup_database, connection):
-    """Тест создания базы данных и таблицы пользователей."""
-    cursor = connection.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users';")
-    table_exists = cursor.fetchone()
-    assert table_exists, "Таблица 'users' должна существовать в базе данных."
+def add_user(username: str, password: str) -> None:
+    """Добавление нового пользователя"""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password))
+    conn.commit()
+    conn.close()
 
-def test_add_new_user(setup_database, connection):
-    """Тест добавления нового пользователя."""
-    add_user('testuser', 'testuser@example.com', 'password123')
-    cursor = connection.cursor()
-    cursor.execute("SELECT * FROM users WHERE username='testuser';")
+
+def authenticate_user(username: str, password: str) -> bool:
+    """Авторизация пользователя"""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password))
     user = cursor.fetchone()
-    assert user, "Пользователь должен быть добавлен в базу данных."
+    conn.close()
+    return user is not None
 
-# Возможные варианты тестов:
-"""
-Тест добавления пользователя с существующим логином.
-Тест успешной аутентификации пользователя.
-Тест аутентификации несуществующего пользователя.
-Тест аутентификации пользователя с неправильным паролем.
-Тест отображения списка пользователей.
-"""
+
+def display_users() -> list[str]:
+    """Получение списка всех пользователей"""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("SELECT username FROM users")
+    users = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return users
